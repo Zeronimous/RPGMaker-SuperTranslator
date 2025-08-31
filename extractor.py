@@ -15,16 +15,19 @@ def is_skippable(value):
 
 def yield_text(base_id, text):
     """
-    Ayudante para generar texto. Si el texto contiene saltos de línea (como '\\n'),
-    lo divide y añade sufijos al ID.
+    Ayudante para generar texto. Normaliza los saltos de línea y, si el texto
+    es multilínea, lo divide y añade sufijos al ID.
     """
-    if '\\n' in text:
-        lines = text.split('\\n')
+    # Normalizar la representación de saltos de línea: reemplazar '\\n' literal por '\n'
+    normalized_text = text.replace('\\n', '\n')
+
+    if '\n' in normalized_text:
+        lines = normalized_text.split('\n')
         for i, line in enumerate(lines):
-            if line:
+            if line.strip(): # Ignorar líneas vacías o con solo espacios
                 yield {'id': f"{base_id}_{i+1}", 'text': line}
     else:
-        yield {'id': base_id, 'text': text}
+        yield {'id': base_id, 'text': normalized_text}
 
 def find_translatable_text(data, path, filename):
     if isinstance(data, dict):
