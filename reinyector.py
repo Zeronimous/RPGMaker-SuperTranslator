@@ -53,7 +53,6 @@ def main():
         print(f"Error: El archivo de traducciones '{INPUT_CSV}' no fue encontrado.")
         return
 
-    # Agrupar traducciones por archivo para procesar un archivo a la vez
     translations_by_file = defaultdict(list)
     try:
         with open(INPUT_CSV, 'r', encoding='utf-8') as csvfile:
@@ -65,10 +64,6 @@ def main():
                         translations_by_file[filename].append({'path': path, 'text': row['text']})
                     except ValueError:
                         print(f"  Advertencia: Fila mal formada en CSV, saltando: {row}")
-
-    except FileNotFoundError:
-        print(f"Error: No se pudo encontrar el archivo {INPUT_CSV}")
-        return
     except Exception as e:
         print(f"Error leyendo el archivo CSV: {e}")
         return
@@ -77,29 +72,46 @@ def main():
 
     for filename, translations in translations_by_file.items():
         filepath = os.path.join(DATA_DIR, filename)
-
         if not os.path.exists(filepath):
             print(f"  Advertencia: No se encontró el archivo de datos {filepath}, saltando...")
             continue
 
-        print(f"Procesando: {filename} ({len(translations)} entradas)")
+        print(f"Procesando: {filename}...")
 
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
+            # Agrupar textos por ID base para reconstruir textos multilínea
+            grouped_texts = defaultdict(dict)
+            single_texts = []
             for t in translations:
+                match = re.match(r'(.+)_(\d+)$', t['path'])
+                if match:
+                    base_path, index = match.groups()
+                    grouped_texts[base_path][int(index)] = t['text']
+                else:
+                    single_texts.append(t)
+
+            # Inyectar textos multilínea reconstruidos
+            for base_path, parts in grouped_texts.items():
+                sorted_parts = [parts[k] for k in sorted(parts.keys())]
+                final_text = "\n".join(sorted_parts)
+                try:
+                    set_value_by_path(data, base_path, final_text)
+                except (KeyError, IndexError) as e:
+                    print(f"  Error al procesar ID multilínea '{base_path}': {e}.")
+
+            # Inyectar textos de línea única
+            for t in single_texts:
                 try:
                     set_value_by_path(data, t['path'], t['text'])
                 except (KeyError, IndexError) as e:
-                    print(f"  Error al procesar la ID '{t['path']}' en {filename}: {e}. Saltando esta entrada.")
+                    print(f"  Error al procesar ID '{t['path']}': {e}.")
 
-            # Escribir el archivo JSON modificado
             with open(filepath, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
 
-        except json.JSONDecodeError:
-            print(f"  Error: No se pudo decodificar JSON en {filename}.")
         except Exception as e:
             print(f"  Error inesperado procesando {filename}: {e}")
 
