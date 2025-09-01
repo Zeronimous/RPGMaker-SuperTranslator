@@ -13,7 +13,7 @@ AUDIO_PARENT_KEYS = {'bgm', 'bgs', 'me', 'se'}
 # Claves que generalmente contienen texto seguro para traducir
 SAFE_TEXT_KEYS = {'name', 'description', 'displayName', 'profile', 'message1', 'message2', 'message3', 'message4'}
 
-EXCLUDED_FILES = {'Animations.json'}
+EXCLUDED_FILES = {'Animations.json', 'MapInfos.json'}
 EVENT_TEXT_CODES = {401, 405}
 EVENT_CHOICE_CODE = 102
 
