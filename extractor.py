@@ -18,21 +18,26 @@ EVENT_TEXT_CODES = {401, 405}
 EVENT_CHOICE_CODE = 102
 
 def is_skippable(value):
-    return not value or not isinstance(value, str) or value.strip() == "" or value.startswith('◆')
+    if not value or not isinstance(value, str):
+        return True
+
+    stripped_value = value.strip()
+    return not stripped_value or stripped_value.startswith('◆') or stripped_value.startswith('--')
 
 def yield_text(base_id, text):
     """
     Ayudante para generar texto. Normaliza los saltos de línea y, si el texto
-    es multilínea, lo divide y añade sufijos al ID.
+    es multilínea, lo divide y añade sufijos al ID. Filtra líneas no deseadas.
     """
     normalized_text = text.replace('\\n', '\n')
     if '\n' in normalized_text:
         lines = normalized_text.split('\n')
         for i, line in enumerate(lines):
-            if line.strip():
+            if not is_skippable(line):
                 yield {'id': f"{base_id}_{i+1}", 'text': line}
     else:
-        yield {'id': base_id, 'text': normalized_text}
+        if not is_skippable(normalized_text):
+            yield {'id': base_id, 'text': normalized_text}
 
 def find_translatable_text(data, path, filename):
     if isinstance(data, dict):
@@ -41,13 +46,11 @@ def find_translatable_text(data, path, filename):
             code = data.get('code', 0)
             if code in EVENT_TEXT_CODES:
                 text = data['parameters'][0]
-                if not is_skippable(text):
-                    yield from yield_text(f"{filename}:{path}:parameters[0]", text)
+                yield from yield_text(f"{filename}:{path}:parameters[0]", text)
             elif code == EVENT_CHOICE_CODE:
                 choices = data['parameters'][0]
                 for i, choice in enumerate(choices):
-                    if not is_skippable(choice):
-                        yield from yield_text(f"{filename}:{path}:parameters[0][{i}]", choice)
+                    yield from yield_text(f"{filename}:{path}:parameters[0][{i}]", choice)
 
         # Rama 2: Manejar todos los demás objetos (no son comandos de evento)
         else:
@@ -68,7 +71,7 @@ def find_translatable_text(data, path, filename):
                     continue
 
                 new_path = f"{path}:{key}" if path else key
-                if key in SAFE_TEXT_KEYS and not is_skippable(value):
+                if key in SAFE_TEXT_KEYS and value:
                     yield from yield_text(f"{filename}:{new_path}", value)
                 else:
                     yield from find_translatable_text(value, new_path, filename)
@@ -86,12 +89,10 @@ def extract_text_from_system(data, path, filename):
         for category in ['basic', 'commands', 'params']:
             if category in terms:
                 for i, text in enumerate(terms[category]):
-                    if not is_skippable(text):
-                        yield from yield_text(f"{filename}:terms:{category}[{i}]", text)
+                    yield from yield_text(f"{filename}:terms:{category}[{i}]", text)
         if 'messages' in terms:
             for key, text in terms['messages'].items():
-                if not is_skippable(text):
-                    yield from yield_text(f"{filename}:terms:messages:{key}", text)
+                yield from yield_text(f"{filename}:terms:messages:{key}", text)
 
 def main():
     all_texts = []
