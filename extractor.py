@@ -31,10 +31,7 @@ def yield_text(base_id, text):
 
 def find_translatable_text(data, path, filename):
     if isinstance(data, dict):
-        is_map_event = 'pages' in data and 'name' in data and filename.startswith('Map')
-        is_common_event = 'list' in data and 'name' in data and filename == 'CommonEvents.json'
-        is_event_obj = is_map_event or is_common_event
-
+        # Rama 1: Manejar comandos de evento
         if 'code' in data and 'parameters' in data:
             code = data.get('code', 0)
             if code in EVENT_TEXT_CODES:
@@ -46,16 +43,22 @@ def find_translatable_text(data, path, filename):
                 for i, choice in enumerate(choices):
                     if not is_skippable(choice):
                         yield from yield_text(f"{filename}:{path}:parameters[0][{i}]", choice)
-            return
+            # Para cualquier otro código de evento (como 241), no hacer nada y detener el análisis de este objeto.
 
-        for key, value in data.items():
-            if is_event_obj and key == 'name':
-                continue
-            new_path = f"{path}:{key}" if path else key
-            if key in TEXT_KEYS and not is_skippable(value):
-                yield from yield_text(f"{filename}:{new_path}", value)
-            else:
-                yield from find_translatable_text(value, new_path, filename)
+        # Rama 2: Manejar todos los demás objetos (no son comandos de evento)
+        else:
+            is_map_event = 'pages' in data and 'name' in data and filename.startswith('Map')
+            is_common_event = 'list' in data and 'name' in data and filename == 'CommonEvents.json'
+            is_event_obj = is_map_event or is_common_event
+
+            for key, value in data.items():
+                if is_event_obj and key == 'name':
+                    continue
+                new_path = f"{path}:{key}" if path else key
+                if key in TEXT_KEYS and not is_skippable(value):
+                    yield from yield_text(f"{filename}:{new_path}", value)
+                else:
+                    yield from find_translatable_text(value, new_path, filename)
 
     elif isinstance(data, list):
         for i, item in enumerate(data):
