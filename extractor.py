@@ -5,7 +5,14 @@ import re
 
 DATA_DIR = 'data/'
 OUTPUT_CSV = 'traducciones.csv'
-TEXT_KEYS = {'name', 'description', 'profile', 'displayName'}
+
+# Claves que son siempre nombres de archivo y deben ser ignoradas
+FILENAME_KEYS = {'battleback1Name', 'battleback2Name', 'parallaxName', 'characterName', 'faceName'}
+# Claves "padre" que indican que una clave "name" hija es un nombre de archivo de audio
+AUDIO_PARENT_KEYS = {'bgm', 'bgs', 'me', 'se'}
+# Claves que generalmente contienen texto seguro para traducir
+SAFE_TEXT_KEYS = {'name', 'description', 'displayName', 'profile', 'message1', 'message2', 'message3', 'message4'}
+
 EXCLUDED_FILES = {'Animations.json'}
 EVENT_TEXT_CODES = {401, 405}
 EVENT_CHOICE_CODE = 102
@@ -18,13 +25,11 @@ def yield_text(base_id, text):
     Ayudante para generar texto. Normaliza los saltos de línea y, si el texto
     es multilínea, lo divide y añade sufijos al ID.
     """
-    # Normalizar la representación de saltos de línea: reemplazar '\\n' literal por '\n'
     normalized_text = text.replace('\\n', '\n')
-
     if '\n' in normalized_text:
         lines = normalized_text.split('\n')
         for i, line in enumerate(lines):
-            if line.strip(): # Ignorar líneas vacías o con solo espacios
+            if line.strip():
                 yield {'id': f"{base_id}_{i+1}", 'text': line}
     else:
         yield {'id': base_id, 'text': normalized_text}
@@ -43,19 +48,27 @@ def find_translatable_text(data, path, filename):
                 for i, choice in enumerate(choices):
                     if not is_skippable(choice):
                         yield from yield_text(f"{filename}:{path}:parameters[0][{i}]", choice)
-            # Para cualquier otro código de evento (como 241), no hacer nada y detener el análisis de este objeto.
 
         # Rama 2: Manejar todos los demás objetos (no son comandos de evento)
         else:
-            is_map_event = 'pages' in data and 'name' in data and filename.startswith('Map')
-            is_common_event = 'list' in data and 'name' in data and filename == 'CommonEvents.json'
-            is_event_obj = is_map_event or is_common_event
+            parent_key = path.split(':')[-1] if path else ''
 
             for key, value in data.items():
-                if is_event_obj and key == 'name':
+                # Regla 1: Ignorar claves que son nombres de archivo
+                if key in FILENAME_KEYS:
                     continue
+                # Regla 2: Ignorar 'name' si el padre es un objeto de audio
+                if key == 'name' and parent_key in AUDIO_PARENT_KEYS:
+                    continue
+
+                # Regla 3: Ignorar 'name' de un objeto de evento
+                is_map_event = 'pages' in data and 'name' in data and filename.startswith('Map')
+                is_common_event = 'list' in data and 'name' in data and filename == 'CommonEvents.json'
+                if (is_map_event or is_common_event) and key == 'name':
+                    continue
+
                 new_path = f"{path}:{key}" if path else key
-                if key in TEXT_KEYS and not is_skippable(value):
+                if key in SAFE_TEXT_KEYS and not is_skippable(value):
                     yield from yield_text(f"{filename}:{new_path}", value)
                 else:
                     yield from find_translatable_text(value, new_path, filename)
