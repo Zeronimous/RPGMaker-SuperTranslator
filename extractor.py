@@ -101,10 +101,12 @@ def extract_text_from_system(data, path, filename):
         for category in ['basic', 'commands', 'params']:
             if category in terms:
                 for i, text in enumerate(terms[category]):
-                    yield from yield_text(f"{filename}:terms:{category}[{i}]", text)
+                    if text: # Añadida comprobación para evitar valores nulos
+                        yield from yield_text(f"{filename}:terms:{category}[{i}]", text)
         if 'messages' in terms:
             for key, text in terms['messages'].items():
-                yield from yield_text(f"{filename}:terms:messages:{key}", text)
+                if text: # Añadida comprobación para evitar valores nulos
+                    yield from yield_text(f"{filename}:terms:messages:{key}", text)
 
 def main():
     all_texts = []
