@@ -11,7 +11,7 @@ FILENAME_KEYS = {'battleback1Name', 'battleback2Name', 'parallaxName', 'characte
 # Claves "padre" que indican que una clave "name" hija es un nombre de archivo de audio
 AUDIO_PARENT_KEYS = {'bgm', 'bgs', 'me', 'se'}
 # Claves que generalmente contienen texto seguro para traducir
-SAFE_TEXT_KEYS = {'name', 'description', 'displayName', 'profile', 'message1', 'message2', 'message3', 'message4'}
+SAFE_TEXT_KEYS = {'name', 'description', 'displayName', 'profile', 'note', 'message1', 'message2', 'message3', 'message4'}
 
 EXCLUDED_FILES = {'Animations.json', 'MapInfos.json', 'Tilesets.json'}
 EVENT_TEXT_CODES = {401, 405}
@@ -52,15 +52,12 @@ def find_translatable_text(data, path, filename):
                 for i, choice in enumerate(choices):
                     yield from yield_text(f"{filename}:{path}:parameters[0][{i}]", choice)
             elif code == 122:
-                # Manejo especial para Control de Variables -> Script
-                if len(data['parameters']) > 4 and data['parameters'][3] == 4: # Operando es Script
-                    text = data['parameters'][4]
+                # Manejo específico para Control de Variables con la firma [8,8,0,4,"..."]
+                params = data['parameters']
+                if len(params) == 5 and params[0:4] == [8, 8, 0, 4]:
+                    text = params[4]
                     if isinstance(text, str) and text.startswith('"') and text.endswith('"'):
-                        # Heurística: Asumir que es texto traducible si contiene un espacio.
-                        # Esto evita extraer códigos de script como "\"\\I[126]\"".
-                        content_inside_quotes = text[1:-1]
-                        if ' ' in content_inside_quotes:
-                            yield {'id': f"{filename}:{path}:parameters[4]", 'text': text}
+                        yield {'id': f"{filename}:{path}:parameters[4]", 'text': text}
 
         # Rama 2: Manejar todos los demás objetos (no son comandos de evento)
         else:
