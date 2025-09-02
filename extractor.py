@@ -13,7 +13,7 @@ AUDIO_PARENT_KEYS = {'bgm', 'bgs', 'me', 'se'}
 # Claves que generalmente contienen texto seguro para traducir
 SAFE_TEXT_KEYS = {'name', 'description', 'displayName', 'profile', 'message1', 'message2', 'message3', 'message4'}
 
-EXCLUDED_FILES = {'Animations.json', 'MapInfos.json'}
+EXCLUDED_FILES = {'Animations.json', 'MapInfos.json', 'Tilesets.json'}
 EVENT_TEXT_CODES = {401, 405}
 EVENT_CHOICE_CODE = 102
 
@@ -84,6 +84,18 @@ def find_translatable_text(data, path, filename):
             yield from find_translatable_text(item, new_path, filename)
 
 def extract_text_from_system(data, path, filename):
+    # Procesar los arrays de "tipos"
+    type_arrays = ['armorTypes', 'elements', 'equipTypes', 'skillTypes', 'weaponTypes']
+    for array_name in type_arrays:
+        if array_name in data and isinstance(data[array_name], list):
+            for i, text in enumerate(data[array_name]):
+                # El primer elemento a menudo es nulo o vacío
+                if i == 0 and not text:
+                    continue
+                if text:
+                    yield from yield_text(f"{filename}:{array_name}[{i}]", text)
+
+    # Procesar el objeto "terms"
     if 'terms' in data:
         terms = data['terms']
         for category in ['basic', 'commands', 'params']:
