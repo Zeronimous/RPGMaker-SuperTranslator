@@ -53,12 +53,14 @@ def find_translatable_text(data, path, filename):
                     yield from yield_text(f"{filename}:{path}:parameters[0][{i}]", choice)
             elif code == 122:
                 # Manejo especial para Control de Variables -> Script
-                # Parámetro 3 es el tipo de operando, 4 es 'Script'
-                if len(data['parameters']) > 4 and data['parameters'][3] == 4:
+                if len(data['parameters']) > 4 and data['parameters'][3] == 4: # Operando es Script
                     text = data['parameters'][4]
-                    # Extraer solo si parece una cadena de texto entrecomillada
                     if isinstance(text, str) and text.startswith('"') and text.endswith('"'):
-                         yield {'id': f"{filename}:{path}:parameters[4]", 'text': text}
+                        # Heurística: Asumir que es texto traducible si contiene un espacio.
+                        # Esto evita extraer códigos de script como "\"\\I[126]\"".
+                        content_inside_quotes = text[1:-1]
+                        if ' ' in content_inside_quotes:
+                            yield {'id': f"{filename}:{path}:parameters[4]", 'text': text}
 
         # Rama 2: Manejar todos los demás objetos (no son comandos de evento)
         else:
