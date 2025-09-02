@@ -11,7 +11,12 @@ FILENAME_KEYS = {'battleback1Name', 'battleback2Name', 'parallaxName', 'characte
 # Claves "padre" que indican que una clave "name" hija es un nombre de archivo de audio
 AUDIO_PARENT_KEYS = {'bgm', 'bgs', 'me', 'se'}
 # Claves que generalmente contienen texto seguro para traducir
-SAFE_TEXT_KEYS = {'name', 'description', 'displayName', 'profile', 'note', 'message1', 'message2', 'message3', 'message4'}
+SAFE_TEXT_KEYS = {'name', 'description', 'displayName', 'profile', 'message1', 'message2', 'message3', 'message4'}
+
+# Expresiones regulares para buscar texto en los campos 'note'
+NOTETAG_REGEXES = {
+    'breakMsg': re.compile(r'<breakMsg:(.*?)>', re.IGNORECASE)
+}
 
 EXCLUDED_FILES = {'Animations.json', 'MapInfos.json', 'Tilesets.json'}
 EVENT_TEXT_CODES = {401, 405}
@@ -78,7 +83,20 @@ def find_translatable_text(data, path, filename):
                     continue
 
                 new_path = f"{path}:{key}" if path else key
-                if key in SAFE_TEXT_KEYS and value:
+
+                # Manejo especial para el campo 'note' con regex
+                if key == 'note' and isinstance(value, str):
+                    for tag_name, regex in NOTETAG_REGEXES.items():
+                        for match in regex.finditer(value):
+                            if match.group(1):
+                                # Usar un ID especial de 3 partes para el reinyector
+                                special_id = f"{filename}:{new_path}:{tag_name}"
+                                yield from yield_text(special_id, match.group(1))
+                    # Continuar la búsqueda recursiva por si el valor es un objeto complejo
+                    # (aunque 'note' suele ser un string, esto añade robustez)
+                    yield from find_translatable_text(value, new_path, filename)
+
+                elif key in SAFE_TEXT_KEYS and value:
                     yield from yield_text(f"{filename}:{new_path}", value)
                 else:
                     yield from find_translatable_text(value, new_path, filename)

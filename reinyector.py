@@ -4,51 +4,42 @@ import csv
 import re
 from collections import defaultdict
 
-# Directorio donde se encuentran los archivos de datos de RPG Maker MZ
 DATA_DIR = 'data/'
-# Archivo CSV de entrada con las traducciones
 INPUT_CSV = 'traducciones.csv'
 
-def set_value_by_path(data, path, value):
-    """
-    Navega por una estructura de datos (diccionarios/listas) usando un path y establece un valor.
-    El path es una cadena como 'events[1]:pages[0]:list[1]:parameters[0]'.
-    """
-    keys = re.split(r'[:\[\]]+', path)
-    keys = [k for k in keys if k]  # Eliminar cadenas vacías
+# Expresiones regulares para la reinyección en los campos 'note'
+# La clave debe coincidir con la usada en el extractor
+NOTETAG_REGEXES = {
+    'breakMsg': re.compile(r'(<breakMsg:)(.*?)(>)', re.IGNORECASE)
+}
 
+def set_value_by_path(data, path, value):
+    keys = re.split(r'[:\[\]]+', path)
+    keys = [k for k in keys if k]
     current_element = data
     for i, key in enumerate(keys[:-1]):
         if key.isdigit():
-            idx = int(key)
-            if isinstance(current_element, list) and idx < len(current_element):
-                current_element = current_element[idx]
-            else:
-                # El path no es válido en la estructura actual
-                raise KeyError(f"Índice fuera de rango: {key} en el path {path}")
+            current_element = current_element[int(key)]
         else:
-            if isinstance(current_element, dict) and key in current_element:
-                current_element = current_element[key]
-            else:
-                # El path no es válido
-                raise KeyError(f"Clave no encontrada: {key} en el path {path}")
-
+            current_element = current_element[key]
     final_key = keys[-1]
     if final_key.isdigit():
-        idx = int(final_key)
-        if isinstance(current_element, list) and idx < len(current_element):
-            current_element[idx] = value
-        else:
-            raise KeyError(f"Índice final fuera de rango: {final_key} en el path {path}")
+        current_element[int(final_key)] = value
     else:
-        if isinstance(current_element, dict):
-            current_element[final_key] = value
-        else:
-            raise KeyError(f"El elemento final no es un diccionario para la clave: {final_key} en el path {path}")
+        current_element[final_key] = value
 
+def get_value_by_path(data, path):
+    keys = re.split(r'[:\[\]]+', path)
+    keys = [k for k in keys if k]
+    current_element = data
+    for key in keys:
+        if key.isdigit():
+            current_element = current_element[int(key)]
+        else:
+            current_element = current_element[key]
+    return current_element
 
 def main():
-    """Función principal del script."""
     if not os.path.exists(INPUT_CSV):
         print(f"Error: El archivo de traducciones '{INPUT_CSV}' no fue encontrado.")
         return
@@ -59,55 +50,68 @@ def main():
             reader = csv.DictReader(csvfile)
             for row in reader:
                 if 'id' in row and 'text' in row and row['id'] and row['text'] is not None:
-                    try:
-                        filename, path = row['id'].split(':', 1)
-                        translations_by_file[filename].append({'path': path, 'text': row['text']})
-                    except ValueError:
-                        print(f"  Advertencia: Fila mal formada en CSV, saltando: {row}")
+                    translations_by_file[row['id'].split(':')[0]].append(row)
     except Exception as e:
         print(f"Error leyendo el archivo CSV: {e}")
         return
 
     print("Iniciando reinyección de textos...")
 
-    for filename, translations in translations_by_file.items():
+    for filename, rows in translations_by_file.items():
         filepath = os.path.join(DATA_DIR, filename)
         if not os.path.exists(filepath):
             print(f"  Advertencia: No se encontró el archivo de datos {filepath}, saltando...")
             continue
 
         print(f"Procesando: {filename}...")
-
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
-            # Agrupar textos por ID base para reconstruir textos multilínea
-            grouped_texts = defaultdict(dict)
-            single_texts = []
-            for t in translations:
-                match = re.match(r'(.+)_(\d+)$', t['path'])
-                if match:
-                    base_path, index = match.groups()
-                    grouped_texts[base_path][int(index)] = t['text']
+            # Separar traducciones normales, multilínea y de notetags
+            grouped_multiline = defaultdict(dict)
+            single_line = []
+            notetags = []
+
+            for row in rows:
+                full_path = row['id'].split(':', 1)[1]
+
+                # Intentar clasificar como notetag primero
+                match_notetag = re.match(r'(.+):(\w+)$', full_path)
+                if match_notetag:
+                    path, tag_name = match_notetag.groups()
+                    if tag_name in NOTETAG_REGEXES:
+                        notetags.append({'path': path, 'tag': tag_name, 'text': row['text']})
+                        continue
+
+                # Si no es notetag, comprobar si es multilínea
+                match_multiline = re.match(r'(.+)_(\d+)$', full_path)
+                if match_multiline:
+                    base_path, index = match_multiline.groups()
+                    grouped_multiline[base_path][int(index)] = row['text']
                 else:
-                    single_texts.append(t)
+                    # Si no, es una línea única
+                    single_line.append({'path': full_path, 'text': row['text']})
 
-            # Inyectar textos multilínea reconstruidos
-            for base_path, parts in grouped_texts.items():
-                sorted_parts = [parts[k] for k in sorted(parts.keys())]
-                final_text = "\n".join(sorted_parts)
-                try:
-                    set_value_by_path(data, base_path, final_text)
-                except (KeyError, IndexError) as e:
-                    print(f"  Error al procesar ID multilínea '{base_path}': {e}.")
+            # 1. Inyectar textos de una sola línea
+            for t in single_line:
+                set_value_by_path(data, t['path'], t['text'])
 
-            # Inyectar textos de línea única
-            for t in single_texts:
-                try:
-                    set_value_by_path(data, t['path'], t['text'])
-                except (KeyError, IndexError) as e:
-                    print(f"  Error al procesar ID '{t['path']}': {e}.")
+            # 2. Inyectar textos multilínea reconstruidos
+            for base_path, parts in grouped_multiline.items():
+                final_text = "\n".join(parts[k] for k in sorted(parts.keys()))
+                set_value_by_path(data, base_path, final_text)
+
+            # 3. Inyectar textos de notetags con regex
+            for tag_info in notetags:
+                path = tag_info['path']
+                tag_name = tag_info['tag']
+                regex = NOTETAG_REGEXES[tag_name]
+
+                original_string = get_value_by_path(data, path)
+                # Construir el reemplazo: grupo1 + nuevo texto + grupo3
+                new_string = regex.sub(r'\g<1>' + tag_info['text'] + r'\g<3>', original_string)
+                set_value_by_path(data, path, new_string)
 
             with open(filepath, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
