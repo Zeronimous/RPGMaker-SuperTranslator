@@ -56,6 +56,11 @@ def find_translatable_text(data, path, filename):
                 choices = data['parameters'][0]
                 for i, choice in enumerate(choices):
                     yield from yield_text(f"{filename}:{path}:parameters[0][{i}]", choice)
+            elif code == 101: # Nombre del hablante
+                if len(data['parameters']) > 4:
+                    text = data['parameters'][4]
+                    if not is_skippable(text):
+                        yield from yield_text(f"{filename}:{path}:parameters[4]", text)
             elif code == 122:
                 # Manejo específico para Control de Variables con la firma [8,8,0,4,"..."]
                 params = data['parameters']
